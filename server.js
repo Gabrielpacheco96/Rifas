@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const mercadopago = require('mercadopago');
+const Coinpayments = require('coinpayments');
 const admin = require('firebase-admin');
 
 const app = express();
@@ -14,53 +14,40 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-// Configure seu Access Token do MercadoPago
-mercadopago.configure({
-  access_token: 'SEU_ACCESS_TOKEN_AQUI'
+// Configure CoinPayments
+const client = new Coinpayments({
+  key: 'e578e37ee01843ce997baeb40fe84518', // sua public key
+  secret: 'uY8SBo86Z3ZzgdkR9ASRYYI19vTDpLHE//o3xp+fG4o=' // sua secret key
 });
 
-// Endpoint para criar pagamento
-app.post('/criar-pagamento', async (req, res) => {
+// Endpoint para criar pagamento em cripto (valor em reais, convertido automaticamente)
+app.post('/criar-pagamento-cripto', async (req, res) => {
   const { valor, userId, nomeUsuario } = req.body;
   try {
-    const preference = await mercadopago.preferences.create({
-      items: [{
-        title: `Depósito de saldo - ${nomeUsuario}`,
-        unit_price: Number(valor),
-        quantity: 1,
-      }],
-      metadata: { userId },
-      payment_methods: {
-        excluded_payment_types: [],
-        installments: 1
-      },
-      back_urls: {
-        success: 'https://seusite.com/sucesso',
-        failure: 'https://seusite.com/erro',
-        pending: 'https://seusite.com/pendente'
-      },
-      notification_url: 'https://SEU_BACKEND_URL/webhook'
+    const result = await client.createTransaction({
+      currency1: 'BRL', // moeda do valor (real)
+      currency2: 'USDT', // moeda que vai receber (pode ser BTC, ETH, etc.)
+      amount: valor,
+      buyer_email: 'email@cliente.com', // opcional
+      custom: userId
     });
-    res.json({ init_point: preference.body.init_point });
+    res.json({ checkout_url: result.checkout_url });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Webhook para receber notificações do MercadoPago
-app.post('/webhook', async (req, res) => {
-  const payment = req.body;
+// Webhook para receber notificações do CoinPayments
+app.post('/webhook-cripto', async (req, res) => {
+  const { custom, status, amount1 } = req.body;
   try {
-    if (payment.type === 'payment') {
-      // Buscar detalhes do pagamento
-      const { data } = await mercadopago.payment.findById(payment.data.id);
-      if (data.status === 'approved') {
-        const userId = data.metadata.userId;
-        const valor = data.transaction_amount;
-        // Atualizar saldo no Firestore
-        const saldoRef = db.collection('saldos').doc(userId);
-        await saldoRef.set({ saldo: admin.firestore.FieldValue.increment(valor) }, { merge: true });
-      }
+    // status >= 100 significa pagamento confirmado
+    if (status >= 100) {
+      const userId = custom;
+      const valor = parseFloat(amount1);
+      // Atualizar saldo no Firestore
+      const saldoRef = db.collection('saldos').doc(userId);
+      await saldoRef.set({ saldo: admin.firestore.FieldValue.increment(valor) }, { merge: true });
     }
     res.sendStatus(200);
   } catch (err) {

@@ -6,7 +6,6 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, on
 import { collection, onSnapshot, deleteDoc, getDocs, addDoc, query, orderBy, limit } from 'firebase/firestore';
 import { FaWallet, FaSignOutAlt, FaGamepad, FaPlusCircle, FaUser } from 'react-icons/fa';
 import { serverTimestamp } from 'firebase/firestore';
-import ErrorBoundary from './components/ErrorBoundary';
 
 
 function TopBar({ saldo, nome, onLogout }) {
@@ -274,16 +273,31 @@ function Jogo({ saldo, setSaldo, user, nome }) {
   );
 }
 
-function Carregar({ saldo, setSaldo, user }) {
+function Carregar({ saldo, setSaldo, user, nome }) {
   const [valor, setValor] = useState('');
+  const [showCP, setShowCP] = useState(false);
+  const [cpUrl, setCpUrl] = useState('');
+  const [cpLoading, setCpLoading] = useState(false);
   const navigate = useNavigate();
 
-  async function carregar() {
+  async function depositarCoinPay() {
     const v = parseFloat(valor);
     if (isNaN(v) || v <= 0) return alert('Digite um valor válido!');
-    await setDoc(doc(db, 'saldos', user.uid), { saldo: increment(v) }, { merge: true });
-    setValor('');
-    navigate('/');
+    setCpLoading(true);
+    try {
+      const resp = await fetch('https://rifas-3.onrender.com/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor: v, userId: user.uid, nomeUsuario: nome })
+      });
+      const data = await resp.json();
+      if (!data.checkout_url) throw new Error(data.error || 'Erro desconhecido');
+      setCpUrl(data.checkout_url);
+      setShowCP(true);
+    } catch (err) {
+      alert('Erro ao gerar pagamento: ' + (err.message || ''));
+    }
+    setCpLoading(false);
   }
 
   return (
@@ -296,7 +310,18 @@ function Carregar({ saldo, setSaldo, user }) {
         value={valor}
         onChange={e => setValor(e.target.value)}
       />
-      <button onClick={carregar}>Carregar</button>
+      <button style={{marginTop:12, background:'#00bb6a', color:'#fff'}} onClick={depositarCoinPay} disabled={cpLoading}>
+        {cpLoading ? 'Gerando link...' : 'Depositar'}
+      </button>
+      {showCP && (
+        <div style={{marginTop:24, background:'#fff', borderRadius:12, boxShadow:'0 2px 12px #22304a22', padding:24}}>
+          <h3>Pagamento CoinPayments</h3>
+          <p>Você está depositando em reais. O valor será convertido automaticamente para a criptomoeda escolhida no momento do pagamento.</p>
+          <a href={cpUrl} target="_blank" rel="noopener noreferrer" style={{color:'#00bb6a', fontWeight:'bold', fontSize:'1.1rem'}}>Ir para pagamento</a>
+          <br/>
+          <button style={{marginTop:16}} onClick={()=>setShowCP(false)}>Fechar</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -337,6 +362,11 @@ function Perfil({ user, nome, setNome }) {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
+  const [senhaAtual, setSenhaAtual] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [senhaMsg, setSenhaMsg] = useState('');
+  const [apagando, setApagando] = useState(false);
+  const [apagado, setApagado] = useState(false);
 
   async function salvarNome(e) {
     e.preventDefault();
@@ -355,6 +385,38 @@ function Perfil({ user, nome, setNome }) {
     }
   }
 
+  async function mudarSenha(e) {
+    e.preventDefault();
+    setSenhaMsg('');
+    if (!senhaAtual || !novaSenha) return setSenhaMsg('Preencha todos os campos.');
+    try {
+      // Reautenticar usuário
+      const cred = window.firebase.auth.EmailAuthProvider.credential(user.email, senhaAtual);
+      await user.reauthenticateWithCredential(cred);
+      await user.updatePassword(novaSenha);
+      setSenhaMsg('Senha alterada com sucesso!');
+      setSenhaAtual('');
+      setNovaSenha('');
+    } catch (err) {
+      setSenhaMsg('Erro ao mudar senha: ' + (err.message || '')); 
+    }
+  }
+
+  async function apagarConta() {
+    if (!window.confirm('Tem certeza que deseja apagar sua conta? Esta ação é irreversível!')) return;
+    setApagando(true);
+    try {
+      await setDoc(doc(db, 'usuarios', user.uid), {}, { merge: true }); // Limpa dados
+      await user.delete();
+      setApagado(true);
+    } catch (err) {
+      setSenhaMsg('Erro ao apagar conta: ' + (err.message || ''));
+    }
+    setApagando(false);
+  }
+
+  if (apagado) return <div className="carregar-container"><h2>Conta apagada.</h2></div>;
+
   return (
     <div className="carregar-container">
       <h2>Perfil</h2>
@@ -364,6 +426,16 @@ function Perfil({ user, nome, setNome }) {
       </form>
       {erro && <div style={{color:'red',marginTop:8}}>{erro}</div>}
       {sucesso && <div style={{color:'green',marginTop:8}}>{sucesso}</div>}
+      <hr style={{margin:'32px 0',width:'100%'}}/>
+      <form onSubmit={mudarSenha} style={{display:'flex',flexDirection:'column',gap:12}}>
+        <h3>Mudar senha</h3>
+        <input type="password" placeholder="Senha atual" value={senhaAtual} onChange={e=>setSenhaAtual(e.target.value)} />
+        <input type="password" placeholder="Nova senha" value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} />
+        <button type="submit">Alterar senha</button>
+        {senhaMsg && <div style={{color: senhaMsg.includes('sucesso') ? 'green' : 'red', marginTop:8}}>{senhaMsg}</div>}
+      </form>
+      <hr style={{margin:'32px 0',width:'100%'}}/>
+      <button onClick={apagarConta} style={{background:'#c00',color:'#fff',marginTop:18}} disabled={apagando}>{apagando ? 'Apagando...' : 'Apagar conta'}</button>
     </div>
   );
 }
@@ -463,7 +535,7 @@ function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login setUser={setUser} setNome={setNome} />} />
         <Route path="/" element={user ? (nome ? <Jogo saldo={saldo} setSaldo={setSaldo} user={user} nome={nome} /> : <NomeFallback user={user} setNome={setNome} />) : <Navigate to="/login" />} />
-        <Route path="/carregar" element={user ? (nome ? <Carregar saldo={saldo} setSaldo={setSaldo} user={user} /> : <NomeFallback user={user} setNome={setNome} />) : <Navigate to="/login" />} />
+        <Route path="/carregar" element={user ? (nome ? <Carregar saldo={saldo} setSaldo={setSaldo} user={user} nome={nome} /> : <NomeFallback user={user} setNome={setNome} />) : <Navigate to="/login" />} />
         <Route path="/perfil" element={user ? <Perfil user={user} nome={nome} setNome={setNome} /> : <Navigate to="/login" />} />
         <Route path="/carteira" element={user ? <Carteira saldo={saldo} user={user} /> : <Navigate to="/login" />} />
       </Routes>
