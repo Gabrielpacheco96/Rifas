@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "rifa-site",
   "private": true,
   "version": "0.0.0",
@@ -31,5 +32,22 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
     "vite": "^6.3.5"
+=======
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.4.0",
+    "mercadopago": "^2.7.0"
+>>>>>>> b2e6ca553637ab53f871d38453a7da1909378d24
   }
 }
