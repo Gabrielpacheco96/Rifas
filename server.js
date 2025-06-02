@@ -16,8 +16,8 @@ const db = admin.firestore();
 
 // Configure CoinPayments
 const client = new Coinpayments({
-  key: process.env.COINPAYMENTS_PUBLIC_KEY,
-  secret: process.env.COINPAYMENTS_PRIVATE_KEY
+  key: 'e578e37ee01843ce997baeb40fe84518',
+  secret: 'Ite+4Gjq4BdJfFI37j+7vQSwV76JpNJO4+tGRBb/rHM='
 });
 
 // Endpoint para criar pagamento em cripto
